@@ -9,6 +9,9 @@ approved value (and how many operations make up that total) for both, plus a
 breakdown of creditor *type* (national financial institution, multilateral
 organism, foreign government, etc.) which is the cleaner high-level lens since
 "Credor" itself has dozens of distinct institution names.
+
+`compute()` returns the underlying numbers with no printing, so other tools
+(e.g. generate_report.py) can render them their own way.
 """
 
 from collections import defaultdict
@@ -18,16 +21,27 @@ from _datasets import sadipem_rows
 TOP_N = 12
 
 
-def print_breakdown(title, value_by_key, count_by_key, total_value):
+def build_breakdown(value_by_key, count_by_key, total_value):
     ranked = sorted(value_by_key.items(), key=lambda kv: -kv[1])[:TOP_N]
-    print(f"\n{title}")
-    print(f"{'#':>3}  {'Value (R$)':>20} {'Share':>7} {'Operations':>11}  Description")
-    for i, (key, value) in enumerate(ranked, start=1):
-        share = 100 * value / total_value if total_value else 0
-        print(f"{i:>3}  {value:>20,.2f} {share:>6.1f}% {count_by_key[key]:>11}  {key}")
+    return [
+        {
+            "label": key,
+            "value": value,
+            "share_pct": 100 * value / total_value if total_value else 0.0,
+            "operations": count_by_key[key],
+        }
+        for key, value in ranked
+    ]
 
 
-def main():
+def compute():
+    """Aggregate approved ("Deferido*") SADIPEM operations by purpose, creditor and creditor type.
+
+    Returns a dict:
+      total_value, total_count: grand totals across all approved operations
+      finalidade, tipo_credor, credor: each a list of the TOP_N breakdown rows
+        ({"label", "value", "share_pct", "operations"}), sorted by value desc.
+    """
     value_by_finalidade = defaultdict(float)
     count_by_finalidade = defaultdict(int)
     value_by_credor = defaultdict(float)
@@ -50,14 +64,31 @@ def main():
         total_value += v
         total_count += 1
 
-    print(f"Approved (\"Deferido*\") SADIPEM operations, {total_count} total, R$ {total_value:,.2f} combined\n")
+    return {
+        "total_value": total_value,
+        "total_count": total_count,
+        "finalidade": build_breakdown(value_by_finalidade, count_by_finalidade, total_value),
+        "tipo_credor": build_breakdown(value_by_tipo_credor, count_by_tipo_credor, total_value),
+        "credor": build_breakdown(value_by_credor, count_by_credor, total_value),
+    }
+
+
+def print_breakdown(title, rows):
+    print(f"\n{title}")
+    print(f"{'#':>3}  {'Value (R$)':>20} {'Share':>7} {'Operations':>11}  Description")
+    for i, row in enumerate(rows, start=1):
+        print(f"{i:>3}  {row['value']:>20,.2f} {row['share_pct']:>6.1f}% {row['operations']:>11}  {row['label']}")
+
+
+def main():
+    result = compute()
+    print(f"Approved (\"Deferido*\") SADIPEM operations, {result['total_count']} total, "
+          f"R$ {result['total_value']:,.2f} combined\n")
     print(f"Top {TOP_N} by total approved value:")
 
-    print_breakdown("=== Purpose (Finalidade) ===", value_by_finalidade, count_by_finalidade, total_value)
-    print_breakdown("=== Creditor type (Tipo de credor) — fewer, broader categories ===",
-                    value_by_tipo_credor, count_by_tipo_credor, total_value)
-    print_breakdown("=== Creditor (Credor) — specific institutions ===",
-                    value_by_credor, count_by_credor, total_value)
+    print_breakdown("=== Purpose (Finalidade) ===", result["finalidade"])
+    print_breakdown("=== Creditor type (Tipo de credor) — fewer, broader categories ===", result["tipo_credor"])
+    print_breakdown("=== Creditor (Credor) — specific institutions ===", result["credor"])
 
 
 if __name__ == "__main__":

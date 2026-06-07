@@ -39,3 +39,19 @@ Taxa de aprovação dos pedidos de crédito no SADIPEM (Deferido vs. Indeferido 
 
 **`pandemic_spotlight.py`**
 Compara 2020-2021 (pandemia de COVID-19) com os anos imediatamente antes e depois, destacando o quão fora da curva esse período foi: o valor de crédito aprovado disparou (+118% sobre a média da linha de base) bem na hora em que as transferências recebidas caíram — exatamente o tipo de evento extraordinário que uma análise "ano a ano normal" tende a esconder dentro de uma média.
+
+Cada uma dessas análises expõe uma função `compute()` que retorna os dados já agregados (sem imprimir nada), reaproveitada pelo gerador de relatório HTML abaixo.
+
+Relatório HTML (`scripts/generate_report.py` e `scripts/serve_report.py`)
+
+**`scripts/generate_report.py`**
+Gera um relatório HTML único e autocontido (`report.html`, na raiz do projeto) reunindo as sete análises acima em abas, com gráficos de barras em SVG inline, alternância claro/escuro e suporte à impressão — sem dependências externas. Roda as sete `compute()` e monta o HTML:
+
+    python3 scripts/generate_report.py [caminho-de-saida.html]
+
+**`scripts/serve_report.py`**
+Gera o relatório (sempre atualizado com os dados locais em `data/`) e o serve em `http://localhost:8000`, abrindo no navegador padrão — útil para não precisar abrir o arquivo manualmente:
+
+    python3 scripts/serve_report.py [porta]
+
+> Nota: como cada `compute()` percorre ~9 milhões de linhas de CSV, `_datasets.py` mantém os dados já interpretados em cache de memória — sem isso, gerar o relatório levaria minutos em vez de segundos.

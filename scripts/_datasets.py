@@ -14,6 +14,13 @@ import re
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 
+# Each dataset is ~500MB / ~9M rows; every analysis script's compute() walks it
+# at least once, and generate_report.py calls all seven in a row. Re-parsing
+# the CSVs from scratch each time turns "build the report" into a multi-minute
+# wait, so the parsed rows are cached in memory after the first pass.
+_sadipem_cache = None
+_transferencias_cache = None
+
 
 def to_float(value):
     """Parse a Brazilian-formatted number ("1.234.567,89") into a float."""
@@ -27,13 +34,7 @@ def to_float(value):
         return 0.0
 
 
-def sadipem_rows():
-    """Yield SADIPEM request rows as dicts with the fields analyses care about.
-
-    `valor` is parsed to float; `year`/`month` come from the "Data" column
-    (the date the request was processed, DD/MM/YYYY). Rows whose date can't be
-    parsed are skipped — they can't be placed on any time-based comparison.
-    """
+def _load_sadipem_rows():
     for path in glob.glob(os.path.join(DATA_DIR, "sadipemconsultapublicageral*.csv")):
         with open(path, encoding="cp1252") as f:
             for row in csv.DictReader(f, delimiter=";"):
@@ -54,12 +55,23 @@ def sadipem_rows():
                 }
 
 
-def transferencias_rows():
-    """Yield constitutional-transfer rows as dicts, with the three decêndios summed.
+def sadipem_rows():
+    """Yield SADIPEM request rows as dicts with the fields analyses care about.
 
-    `total` is the month's full transfer to that município (the three
-    "decêndio" instalments combined).
+    `valor` is parsed to float; `year`/`month` come from the "Data" column
+    (the date the request was processed, DD/MM/YYYY). Rows whose date can't be
+    parsed are skipped — they can't be placed on any time-based comparison.
+
+    Parsed once and cached in memory — see the caching note near the top
+    of this module for why that matters.
     """
+    global _sadipem_cache
+    if _sadipem_cache is None:
+        _sadipem_cache = list(_load_sadipem_rows())
+    yield from _sadipem_cache
+
+
+def _load_transferencias_rows():
     for path in glob.glob(os.path.join(DATA_DIR, "transferenciamensalmunicipios*.csv*")):
         with open(path, encoding="cp1252") as f:
             for row in csv.DictReader(f, delimiter=";"):
@@ -78,6 +90,21 @@ def transferencias_rows():
                         + to_float(row["3º Decêndio"])
                     ),
                 }
+
+
+def transferencias_rows():
+    """Yield constitutional-transfer rows as dicts, with the three decêndios summed.
+
+    `total` is the month's full transfer to that município (the three
+    "decêndio" instalments combined).
+
+    Parsed once and cached in memory — see the caching note near the top
+    of this module for why that matters.
+    """
+    global _transferencias_cache
+    if _transferencias_cache is None:
+        _transferencias_cache = list(_load_transferencias_rows())
+    yield from _transferencias_cache
 
 
 def population_by_uf():
